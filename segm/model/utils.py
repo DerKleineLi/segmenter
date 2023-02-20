@@ -41,7 +41,7 @@ def resize_pos_embed(posemb, grid_old_shape, grid_new_shape, num_extra_tokens):
 
 
 def checkpoint_filter_fn(state_dict, model):
-    """ convert patch embedding weight from manual patchify + linear proj to conv"""
+    """convert patch embedding weight from manual patchify + linear proj to conv"""
     out_dict = {}
     if "model" in state_dict:
         # For deit models
@@ -89,7 +89,7 @@ def unpadding(y, target_size):
     return y
 
 
-def resize(im, smaller_size):
+def resize(im, smaller_size, mode="bilinear"):
     h, w = im.shape[2:]
     if h < w:
         ratio = w / h
@@ -98,7 +98,7 @@ def resize(im, smaller_size):
         ratio = h / w
         h_res, w_res = ratio * smaller_size, smaller_size
     if min(h, w) < smaller_size:
-        im_res = F.interpolate(im, (int(h_res), int(w_res)), mode="bilinear")
+        im_res = F.interpolate(im, (int(h_res), int(w_res)), mode=mode)
     else:
         im_res = im
     return im_res
@@ -144,7 +144,8 @@ def merge_windows(windows, window_size, ori_shape):
     )[0]
     if flip:
         logit = torch.flip(logit, (2,))
-    result = F.softmax(logit, 0)
+    # result = F.softmax(logit, 0)
+    result = logit
     return result
 
 

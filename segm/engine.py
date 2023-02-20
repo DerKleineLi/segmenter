@@ -6,6 +6,7 @@ from segm.metrics import gather_data, compute_metrics
 from segm.model import utils
 from segm.data.utils import IGNORE_LABEL
 import segm.utils.torch as ptu
+from torch.utils.tensorboard import SummaryWriter
 
 
 def train_one_epoch(
@@ -16,6 +17,7 @@ def train_one_epoch(
     epoch,
     amp_autocast,
     loss_scaler,
+    writer,
 ):
     criterion = torch.nn.CrossEntropyLoss(ignore_index=IGNORE_LABEL)
     logger = MetricLogger(delimiter="  ")
@@ -49,7 +51,11 @@ def train_one_epoch(
             optimizer.step()
 
         num_updates += 1
+
         lr_scheduler.step_update(num_updates=num_updates)
+
+        if num_updates % 100 == 99:
+            writer.add_scalars("batch", {"loss": loss}, num_updates)
 
         torch.cuda.synchronize()
 
@@ -69,7 +75,10 @@ def evaluate(
     window_size,
     window_stride,
     amp_autocast,
+    num_update,
+    writer,
 ):
+    criterion = torch.nn.CrossEntropyLoss(ignore_index=IGNORE_LABEL)
     model_without_ddp = model
     if hasattr(model, "module"):
         model_without_ddp = model.module
@@ -79,6 +88,7 @@ def evaluate(
 
     val_seg_pred = {}
     model.eval()
+    val_loss = 0
     for batch in logger.log_every(data_loader, print_freq, header):
         ims = [im.to(ptu.device) for im in batch["im"]]
         ims_metas = batch["im_metas"]
@@ -95,11 +105,16 @@ def evaluate(
                 window_size,
                 window_stride,
                 batch_size=1,
+            )  # 150x512x683
+            loss = criterion(
+                seg_pred.unsqueeze(0),
+                torch.Tensor(val_seg_gt[filename]).long().unsqueeze(0).to(ptu.device),
             )
+            val_loss += loss / len(data_loader)
             seg_pred = seg_pred.argmax(0)
-
         seg_pred = seg_pred.cpu().numpy()
         val_seg_pred[filename] = seg_pred
+        writer.add_scalars("batch", {"val_loss": val_loss}, num_update)
 
     val_seg_pred = gather_data(val_seg_pred)
     scores = compute_metrics(

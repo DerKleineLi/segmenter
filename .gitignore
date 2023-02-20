@@ -1,3 +1,11 @@
+.history/
+.vscode/
+runs/
+
+# trained models
+seg_small_mask/
+small_32_vanilla/
+small_32_224/
 
 # Created by https://www.toptal.com/developers/gitignore/api/python
 # Edit at https://www.toptal.com/developers/gitignore?templates=python

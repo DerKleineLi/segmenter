@@ -22,6 +22,7 @@ from contextlib import suppress
 
 from segm.utils.distributed import sync_model
 from segm.engine import train_one_epoch, evaluate
+from torch.utils.tensorboard import SummaryWriter
 
 
 @click.command(help="")
@@ -126,7 +127,7 @@ def main(
             batch_size=batch_size,
             normalization=model_cfg["normalization"],
             split="train",
-            num_workers=10,
+            num_workers=6,
         ),
         algorithm_kwargs=dict(
             batch_size=batch_size,
@@ -218,6 +219,7 @@ def main(
     log_dir.mkdir(parents=True, exist_ok=True)
     with open(log_dir / "variant.yml", "w") as f:
         f.write(variant_str)
+    writer = SummaryWriter("runs" / log_dir)
 
     # train
     start_epoch = variant["algorithm_kwargs"]["start_epoch"]
@@ -245,6 +247,7 @@ def main(
             epoch,
             amp_autocast,
             loss_scaler,
+            writer,
         )
 
         # save checkpoint
@@ -270,6 +273,8 @@ def main(
                 window_size,
                 window_stride,
                 amp_autocast,
+                (epoch + 1) * len(train_loader),
+                writer,
             )
             print(f"Stats [{epoch}]:", eval_logger, flush=True)
             print("")
@@ -291,6 +296,9 @@ def main(
                 "epoch": epoch,
                 "num_updates": (epoch + 1) * len(train_loader),
             }
+
+            writer.add_scalars("epoch", log_stats, epoch)
+            writer.close()
 
             with open(log_dir / "log.txt", "a") as f:
                 f.write(json.dumps(log_stats) + "\n")
